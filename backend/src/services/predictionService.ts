@@ -1,5 +1,3 @@
-// backend/src/services/predictionService.ts
-
 import {
   fetchGameInfo,
   fetchModelScore,
@@ -13,46 +11,35 @@ import {
 } from "./gameService";
 
 export async function generatePrediction(gameId: string) {
-  // Load all data sources
-  const gameInfo = await fetchGameInfo(gameId);
-  const modelScore = await fetchModelScore(gameId);
-  const odds = await fetchOdds(gameId);
-  const weather = await fetchWeather(gameId);
-  const injuries = await fetchInjuries(gameId);
-  const bettingLines = await fetchBettingLines(gameId);
-  const weights = await fetchModelWeights();
+  try {
+    const gameInfo = await fetchGameInfo(gameId);
+    if (!gameInfo) return { error: "Game not found" };
 
-  if (!gameInfo || !modelScore) {
-    return null;
+    const modelScore = await fetchModelScore(gameId);
+    if (!modelScore) return { error: "Model score missing" };
+
+    return {
+      gameId,
+      modelName: modelScore.modelName,
+      prediction: modelScore.prediction,
+      confidence: modelScore.confidence,
+      ev: modelScore.ev,
+      teamA: gameInfo.teamA,
+      teamB: gameInfo.teamB,
+      predictedScoreA: modelScore.predictedScoreA,
+      predictedScoreB: modelScore.predictedScoreB,
+      script: modelScore.script,
+      odds: await fetchOdds(gameId),
+      weather: await fetchWeather(gameId),
+      injuries: await fetchInjuries(gameId),
+      bettingLines: await fetchBettingLines(gameId),
+      weights: await fetchModelWeights(),
+      teamAStats: await fetchTeamStats(gameInfo.teamA),
+      teamBStats: await fetchTeamStats(gameInfo.teamB),
+      history: await fetchHistoricalMatchup(gameInfo.teamA, gameInfo.teamB)
+    };
+  } catch (err) {
+    console.error("Prediction generation failed:", err);
+    return { error: "Prediction generation failed" };
   }
-
-  // Team stats
-  const teamAStats = await fetchTeamStats(gameInfo.teamA);
-  const teamBStats = await fetchTeamStats(gameInfo.teamB);
-
-  // Historical matchup
-  const history = await fetchHistoricalMatchup(gameInfo.teamA, gameInfo.teamB);
-
-  // Build final prediction object
-  return {
-    modelName: modelScore.modelName,
-    prediction: modelScore.prediction,
-    confidence: modelScore.confidence,
-    ev: modelScore.ev,
-    teamA: gameInfo.teamA,
-    teamB: gameInfo.teamB,
-    predictedScoreA: modelScore.predictedScoreA,
-    predictedScoreB: modelScore.predictedScoreB,
-    script: modelScore.script,
-
-    // Extra data for future UI expansion
-    odds,
-    weather,
-    injuries,
-    bettingLines,
-    weights,
-    teamAStats,
-    teamBStats,
-    history
-  };
 }

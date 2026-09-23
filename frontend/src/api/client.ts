@@ -1,7 +1,11 @@
-import axios from 'axios';
+const API_BASE = "http://localhost:4000/api";
 
-const client = axios.create({
-  baseURL: '/'
-});
+export async function apiGet(path: string) {
+  const res = await fetch(`${API_BASE}${path}`);
 
-export default client;
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
+  return res.json();
+}

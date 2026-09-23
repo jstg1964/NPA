@@ -1,18 +1,15 @@
-// backend/src/api/games.ts
+import express from "express";
 
-import { Router } from "express";
-import { getAllGames } from "../services/gameService";
+const router = express.Router();
 
-const router = Router();
+const games = [
+  { id: 1, teamA: "Patriots", teamB: "Bills", date: "2024-09-07" },
+  { id: 2, teamA: "Chiefs", teamB: "49ers", date: "2024-09-07" },
+  { id: 3, teamA: "Cowboys", teamB: "Eagles", date: "2024-09-08" }
+];
 
-router.get("/", async (req, res) => {
-  try {
-    const games = await getAllGames();
-    res.json(games);
-  } catch (err) {
-    console.error("Error loading games:", err);
-    res.status(500).json({ error: "Failed to load games" });
-  }
+router.get("/games", (req, res) => {
+  res.json(games);
 });
 
 export default router;

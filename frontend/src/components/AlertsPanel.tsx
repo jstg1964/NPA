@@ -1,19 +1,16 @@
 interface Props {
-  alerts: string[];
+    prediction: any | null;
 }
 
-export default function AlertsPanel({ alerts }: Props) {
-  return (
-    <section className="bg-gray-800 p-4 rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Alerts</h2>
+export default function AlertsPanel({ prediction }: Props) {
+    if (!prediction) return null;
 
-      <ul className="space-y-2">
-        {alerts.map((a, i) => (
-          <li key={i} className="text-yellow-400">
-            {a}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+    return (
+        <div className="alerts-panel">
+            <h2>Alerts</h2>
+            <p>{prediction.script}</p>
+            <p>Weather: {JSON.stringify(prediction.weather)}</p>
+            <p>Injuries: {JSON.stringify(prediction.injuries)}</p>
+        </div>
+    );
 }

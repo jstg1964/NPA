@@ -1,25 +1,17 @@
-// backend/src/api/prediction.ts
-
-import { Router } from "express";
+import express from "express";
 import { generatePrediction } from "../services/predictionService";
 
-const router = Router();
+const router = express.Router();
 
-// GET /api/prediction/:gameId
-router.get("/:gameId", async (req, res) => {
+router.get("/predict/:gameId", async (req, res) => {
+  const { gameId } = req.params;
+
   try {
-    const { gameId } = req.params;
-
-    const prediction = await generatePrediction(gameId);
-
-    if (!prediction) {
-      return res.status(404).json({ error: "Prediction not found" });
-    }
-
-    res.json(prediction);
+    const result = await generatePrediction(gameId);
+    return res.json(result);
   } catch (err) {
-    console.error("Prediction error:", err);
-    res.status(500).json({ error: "Failed to generate prediction" });
+    console.error("Prediction route error:", err);
+    return res.status(500).json({ error: "Prediction route failed" });
   }
 });
 

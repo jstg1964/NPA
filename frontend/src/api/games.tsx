@@ -1,11 +1,12 @@
-import { Router } from "express";
-import { getAllGames } from "../services/gameService";
+import { apiGet } from "./client";
 
-const router = Router();
+export interface Game {
+  id: number;
+  teamA: string;
+  teamB: string;
+  date: string;
+}
 
-router.get("/", async (req, res) => {
-  const games = await getAllGames();
-  res.json(games);
-});
-
-export default router;
+export async function fetchGames(): Promise<Game[]> {
+  return apiGet("/games");
+}

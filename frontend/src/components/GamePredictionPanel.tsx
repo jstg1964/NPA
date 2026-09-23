@@ -1,26 +1,51 @@
-import { GamePredictionResponse } from '../api/prediction';
+import { useState } from "react";
+import PredictionModal from "./PredictionModal";
+import { generatePrediction } from "../api/prediction";
 
 interface Props {
-  prediction: GamePredictionResponse | null;
+    gameId: number | null;
 }
 
-export default function GamePredictionPanel({ prediction }: Props) {
-  if (!prediction) return null;
+export default function GamePredictionPanel({ gameId }: Props) {
+    const [prediction, setPrediction] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showModal, setShowModal] = useState(false);
 
-  return (
-    <section className="bg-gray-800 p-4 rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Game Prediction</h2>
+    async function handlePredict() {
+        if (!gameId) {
+            setError("Please select a game first.");
+            setShowModal(true);
+            return;
+        }
 
-      <p className="text-lg">
-        Winner:{' '}
-        <span className="font-bold text-green-400">
-          {prediction.winner}
-        </span>
-      </p>
-      <p>Score: {prediction.score}</p>
-      <p>Confidence: {(prediction.confidence * 100).toFixed(1)}%</p>
+        setLoading(true);
+        setError(null);
 
-      <div className="mt-4 text-sm text-gray-300">{prediction.script}</div>
-    </section>
-  );
+        try {
+            const data = await generatePrediction(gameId);
+            setPrediction(data);
+            setShowModal(true);
+        } catch (err: any) {
+            setError(err.message || "Prediction failed");
+            setShowModal(true);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <div className="game-prediction-panel">
+            <button onClick={handlePredict}>Predict This Game</button>
+
+            {showModal && (
+                <PredictionModal
+                    prediction={prediction}
+                    loading={loading}
+                    error={error}
+                    onClose={() => setShowModal(false)}
+                />
+            )}
+        </div>
+    );
 }

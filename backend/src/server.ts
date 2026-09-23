@@ -1,24 +1,22 @@
-// backend/src/server.ts
-
 import express from "express";
 import cors from "cors";
 
-import gamesRouter from "./api/games";
 import predictionRouter from "./api/prediction";
+import gamesRouter from "./api/games";
 
 const app = express();
+const PORT = 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// ROUTES
-app.use("/api/games", gamesRouter);
-app.use("/api/prediction", predictionRouter);
+app.use("/api", predictionRouter);
+app.use("/api", gamesRouter);
 
-// START SERVER
-const PORT = 4000;
+app.get("/", (req, res) => {
+  res.send("NFL Betting Assistant Backend Running");
+});
 
 app.listen(PORT, () => {
-  console.log("SERVER FILE EXECUTED");
   console.log(`Backend running on http://localhost:${PORT}`);
 });
