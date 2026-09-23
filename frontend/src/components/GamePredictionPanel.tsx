@@ -4,9 +4,10 @@ import { generatePrediction } from "../api/prediction";
 
 interface Props {
     gameId: number | null;
+    onPrediction: (p: any) => void;
 }
 
-export default function GamePredictionPanel({ gameId }: Props) {
+export default function GamePredictionPanel({ gameId, onPrediction }: Props) {
     const [prediction, setPrediction] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export default function GamePredictionPanel({ gameId }: Props) {
         try {
             const data = await generatePrediction(gameId);
             setPrediction(data);
+            onPrediction(data);
             setShowModal(true);
         } catch (err: any) {
             setError(err.message || "Prediction failed");
@@ -35,8 +37,13 @@ export default function GamePredictionPanel({ gameId }: Props) {
     }
 
     return (
-        <div className="game-prediction-panel">
-            <button onClick={handlePredict}>Predict This Game</button>
+        <div>
+            <button
+                onClick={handlePredict}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold transition"
+            >
+                Predict This Game
+            </button>
 
             {showModal && (
                 <PredictionModal

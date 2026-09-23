@@ -12,25 +12,36 @@ export default function PredictionModal({
                                             onClose
                                         }: Props) {
     return (
-        <div className="modal">
-            <div className="modal-content">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center animate-fadeIn">
+            <div className="bg-gray-800 p-8 rounded shadow-xl w-96 animate-slideUp">
 
                 {loading && <p>Loading prediction...</p>}
 
                 {error && (
                     <>
-                        <p style={{ color: "red" }}>{error}</p>
-                        <button onClick={onClose}>Close</button>
+                        <p className="text-red-400">{error}</p>
+                        <button
+                            onClick={onClose}
+                            className="mt-4 px-4 py-2 bg-red-600 rounded"
+                        >
+                            Close
+                        </button>
                     </>
                 )}
 
                 {!loading && !error && prediction && (
                     <>
-                        <h2>Prediction Result</h2>
-                        <p>Winner: {prediction.prediction}</p>
-                        <p>Confidence: {prediction.confidence}%</p>
-                        <p>{prediction.script}</p>
-                        <button onClick={onClose}>Close</button>
+                        <h2 className="text-2xl font-bold mb-4">Prediction Result</h2>
+                        <p className="text-lg mb-2">Winner: {prediction.prediction}</p>
+                        <p className="text-lg mb-2">Confidence: {prediction.confidence}%</p>
+                        <p className="text-sm opacity-80">{prediction.script}</p>
+
+                        <button
+                            onClick={onClose}
+                            className="mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+                        >
+                            Close
+                        </button>
                     </>
                 )}
 

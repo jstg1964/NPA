@@ -14,10 +14,11 @@ export default function TeamSelector({ selectedGame, onSelectGame }: Props) {
     }, []);
 
     return (
-        <div className="team-selector">
-            <label>Select Game:</label>
+        <div className="space-y-2">
+            <label className="text-lg font-semibold">Select Game:</label>
+
             <select
-                style={{ color: "white", backgroundColor: "#1e1e1e" }}
+                className="bg-gray-800 text-white p-3 rounded border border-gray-700"
                 value={selectedGame?.id ?? ""}
                 onChange={(e) => {
                     const game = games.find((g) => g.id === Number(e.target.value));
