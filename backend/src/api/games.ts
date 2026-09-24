@@ -1,15 +1,23 @@
-import express from "express";
+import { Router, Request, Response } from 'express';
+import { getAllGames } from '../services/gameService';
 
-const router = express.Router();
+const router = Router();
 
-const games = [
-  { id: 1, teamA: "Patriots", teamB: "Bills", date: "2024-09-07" },
-  { id: 2, teamA: "Chiefs", teamB: "49ers", date: "2024-09-07" },
-  { id: 3, teamA: "Cowboys", teamB: "Eagles", date: "2024-09-08" }
-];
+router.get('/games', async (req: Request, res: Response) => {
+  const week = Number(req.query['week'] ?? 3);
 
-router.get("/games", (req, res) => {
-  res.json(games);
+  if (isNaN(week) || week < 1 || week > 22) {
+    res.status(400).json({ error: 'Invalid week. Must be 1–22.' });
+    return;
+  }
+
+  try {
+    const games = await getAllGames(week);
+    res.json(games);
+  } catch (err: any) {
+    console.error('[games route] error:', err.message);
+    res.status(500).json({ error: 'Failed to load games' });
+  }
 });
 
 export default router;
