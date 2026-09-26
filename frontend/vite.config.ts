@@ -5,8 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/predict': 'http://localhost:4000',
-      '/performance': 'http://localhost:4000'
+      '/api': 'http://localhost:4000',
     }
   }
 });

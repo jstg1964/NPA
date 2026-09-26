@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Game } from './gameService';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const API_KEY       = process.env['ODDS_API_KEY'] ?? '';
@@ -92,14 +93,19 @@ export function findOddsForGame(
   const awayNorm  = normalize(awayTeam);
 
   return (
-      allOdds.find(g =>
+      allOdds.find((g: GameOdds) =>
           normalize(g.homeTeam).includes(homeNorm) ||
           homeNorm.includes(normalize(g.homeTeam)),
       ) ??
-      allOdds.find(g =>
+      allOdds.find((g: GameOdds) =>
           normalize(g.awayTeam).includes(awayNorm) ||
           awayNorm.includes(normalize(g.awayTeam)),
       ) ??
       null
   );
+}
+
+// Kept for any callers that filter/map over a games list with odds attached
+export function filterGamesWithOdds(games: Game[]): Game[] {
+  return games.filter((g: Game) => g.spread !== 'N/A' || g.overUnder !== 0);
 }

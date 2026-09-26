@@ -1,256 +1,193 @@
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type PrecipitationType = 'none' | 'light' | 'heavy' | 'snow' | 'blizzard';
 
 export interface GameFactors {
-  homeEPA:           number;
-  awayEPA:           number;
-  homeRedZone:       number;
-  awayRedZone:       number;
-  homePressure:      number;
-  awayPressure:      number;
+  homeEPA: number;
+  awayEPA: number;
+  homeRedZone: number;        // 0–100, 0% now fully allowed
+  awayRedZone: number;
+  homePressure: number;
+  awayPressure: number;
   homePointsAllowed: number;
   awayPointsAllowed: number;
-  homePlays:         number;
-  awayPlays:         number;
-  homeMomentum:      '3-0' | '2-1' | '1-2' | '0-3';
-  awayMomentum:      '3-0' | '2-1' | '1-2' | '0-3';
-  stadiumType:       'outdoor' | 'dome' | 'neutral';
-  temp:              number;
-  wind:              number;
-  precipitation:     PrecipitationType;
-  homeInjuryImpact:  number;
-  awayInjuryImpact:  number;
-  homeH2HWins:       number;
-  awayH2HWins:       number;
-  isDivisional:      boolean;
+  homePlays: number;
+  awayPlays: number;
+  homeMomentum: '3-0' | '2-1' | '1-2' | '0-3';
+  awayMomentum: '3-0' | '2-1' | '1-2' | '0-3';
+  stadiumType: 'outdoor' | 'dome' | 'neutral';
+  temp: number;
+  wind: number;
+  precipitation: PrecipitationType;
+  homeInjuryImpact: number;
+  awayInjuryImpact: number;
+  homeH2HWins: number;
+  awayH2HWins: number;
+  isDivisional: boolean;
 }
 
-export interface ScoringResult {
+export interface PredictionResult {
   homeScore: number;
   awayScore: number;
-}
-
-export interface SimulationResult {
-  homeWinPct:      number;
-  awayWinPct:      number;
-  tiesPct:         number;
-  topScores:       { score: string; pct: string }[];
-  confidence:      number;
+  homeWinPct: number;
+  awayWinPct: number;
+  tiesPct: number;
+  confidence: number;
   confidenceLabel: string;
+  topScores: Array<{ home: number; away: number; pct: number }>;
+  breakdown: Array<{ label: string; homeEdge: number }>;
 }
 
-export interface FactorBreakdown {
-  label: string;
-  value: number;
-}
+const LEAGUE_AVG_PPG     = 23.0;
+const LEAGUE_AVG_EPA     = 0.0;
+const LEAGUE_AVG_RZ      = 58.0;
+const LEAGUE_AVG_PLAYS   = 66.0;
+const LEAGUE_AVG_PA      = 23.0;
+const LEAGUE_AVG_PRESS   = 27.5;
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MOMENTUM_VALUES: Record<string, number> = {
-  '3-0':  2.0,
-  '2-1':  0.5,
-  '1-2': -0.5,
-  '0-3': -2.0,
+const momentumMap: Record<string, number> = {
+  '3-0': 1.5, '2-1': 0.5, '1-2': -0.5, '0-3': -1.5,
 };
 
-const RAIN_PENALTY: Record<PrecipitationType, number> = {
-  none:     0,
-  light:    1.5,
-  heavy:    3.5,
-  snow:     4.0,
-  blizzard: 7.0,
-};
-
-// ─── Gaussian RNG (Box-Muller) ────────────────────────────────────────────────
-
-function gaussianRandom(mean: number, std: number): number {
-  let u1 = Math.random();
-  const u2 = Math.random();
-  while (u1 === 0) u1 = Math.random();
-  return mean + std * Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+function weatherPenalty(f: GameFactors): number {
+  if (f.stadiumType === 'dome') return 0;
+  let pen = 0;
+  if (f.wind > 20)         pen += (f.wind - 20) * 0.15;
+  if (f.temp < 25)         pen += (25 - f.temp) * 0.08;
+  if (f.temp > 95)         pen += (f.temp - 95) * 0.06;
+  const precipPen: Record<PrecipitationType, number> = {
+    none: 0, light: 0.5, heavy: 2.0, snow: 3.5, blizzard: 6.0,
+  };
+  pen += precipPen[f.precipitation] ?? 0;
+  return pen;
 }
 
-// ─── Predict Game ─────────────────────────────────────────────────────────────
+function calcScore(
+    epa: number,
+    redZone: number,
+    plays: number,
+    pressure: number,       // opponent's pressure rate
+    pointsAllowed: number,  // opponent's points allowed
+    momentum: string,
+    injuryImpact: number,
+    h2hEdge: number,
+    isHome: boolean,
+    wxPenalty: number,
+    isDivisional: boolean,
+): number {
+  let score = LEAGUE_AVG_PPG;
 
-export function predictGame(f: GameFactors): ScoringResult {
-  let home = 23;
-  let away = 23;
+  // EPA
+  score += (epa - LEAGUE_AVG_EPA) * 27;
 
-  // EPA/play
-  home += f.homeEPA * 27;
-  away += f.awayEPA * 27;
+  // Defense faced (opponent stats)
+  const pressurePen = (pressure - LEAGUE_AVG_PRESS) * 0.15;
+  const defBlend    = (pointsAllowed * 0.6) + (LEAGUE_AVG_PA * 0.4);
+  score -= pressurePen;
+  score  = score * 0.5 + defBlend * 0.5;
 
-  // Defensive pressure
-  home -= (f.awayPressure - 26) * 0.15;
-  away -= (f.homePressure - 26) * 0.15;
+  // Red zone — ADDITIVE (was multiplicative, now allows 0%)
+  // League avg (58%) = 0 adjustment. 0% = -14.5 pts. 80% = +5.5 pts.
+  score += (redZone - LEAGUE_AVG_RZ) * 0.25;
 
-  // Points-allowed normalisation
-  home = home * 0.6 + (42 - f.awayPointsAllowed) * 0.4;
-  away = away * 0.6 + (42 - f.homePointsAllowed) * 0.4;
+  // Pace
+  score *= plays / LEAGUE_AVG_PLAYS;
 
-  // Red-zone efficiency
-  home *= f.homeRedZone / 58;
-  away *= f.awayRedZone / 58;
+  // Home field
+  if (isHome) score += 2.5;
 
-  // Pace multiplier
-  home *= f.homePlays / 66;
-  away *= f.awayPlays / 66;
-
-  // Home-field advantage
-  if (f.stadiumType !== 'neutral') home += 2.5;
-
-  // Weather — outdoor only
-  if (f.stadiumType === 'outdoor') {
-    if (f.wind > 15) {
-      const windPenalty = (f.wind - 15) * 0.25;
-      home -= windPenalty * 0.5;
-      away -= windPenalty * 0.6;
-    }
-    if (f.temp < 25) {
-      home -= (25 - f.temp) * 0.08;
-      away -= (25 - f.temp) * 0.10;
-    }
-    if (f.temp > 85) {
-      home -= (f.temp - 85) * 0.05;
-      away -= (f.temp - 85) * 0.04;
-    }
-    home -= RAIN_PENALTY[f.precipitation];
-    away -= RAIN_PENALTY[f.precipitation] * 1.1;
-  }
+  // Weather
+  score -= wxPenalty;
 
   // Injuries
-  home -= f.homeInjuryImpact;
-  away -= f.awayInjuryImpact;
+  score -= injuryImpact;
 
   // Momentum
-  home += MOMENTUM_VALUES[f.homeMomentum] ?? 0;
-  away += MOMENTUM_VALUES[f.awayMomentum] ?? 0;
+  score += momentumMap[momentum] ?? 0;
 
-  // Divisional dampening — scores compress toward the mean
-  if (f.isDivisional) {
-    const avg = (home + away) / 2;
-    home = home * 0.85 + avg * 0.15;
-    away = away * 0.85 + avg * 0.15;
-  }
+  // H2H edge (small)
+  score += h2hEdge * 0.5;
 
-  // Head-to-head edge
-  const totalH2H = f.homeH2HWins + f.awayH2HWins;
-  if (totalH2H > 0) {
-    const edge = ((f.homeH2HWins / totalH2H) - 0.5) * 3;
-    home += edge;
-    away -= edge * 0.5;
-  }
+  // Divisional tightening
+  if (isDivisional) score *= 0.96;
 
-  return {
-    homeScore: Math.max(7, Math.min(52, home)),
-    awayScore: Math.max(7, Math.min(52, away)),
-  };
+  return Math.min(52, Math.max(3, score));
 }
 
-// ─── Monte Carlo Simulation ───────────────────────────────────────────────────
+export function predictGame(f: GameFactors): { homeScore: number; awayScore: number } {
+  const wx      = weatherPenalty(f);
+  const totalH2H = f.homeH2HWins + f.awayH2HWins || 1;
+  const homeH2H  = (f.homeH2HWins / totalH2H - 0.5) * 2;
+  const awayH2H  = (f.awayH2HWins / totalH2H - 0.5) * 2;
+
+  const homeScore = calcScore(
+      f.homeEPA, f.homeRedZone, f.homePlays,
+      f.awayPressure, f.awayPointsAllowed,
+      f.homeMomentum, f.homeInjuryImpact,
+      homeH2H, true, wx, f.isDivisional,
+  );
+
+  const awayScore = calcScore(
+      f.awayEPA, f.awayRedZone, f.awayPlays,
+      f.homePressure, f.homePointsAllowed,
+      f.awayMomentum, f.awayInjuryImpact,
+      awayH2H, false, wx, f.isDivisional,
+  );
+
+  return { homeScore, awayScore };
+}
 
 export function runSimulation(
     homeScore: number,
     awayScore: number,
-    n = 10_000,
-): SimulationResult {
-  let homeWins = 0;
-  let awayWins = 0;
-  let ties     = 0;
-  const scoreCounts: Record<string, number> = {};
+    iterations = 10_000,
+): {
+  homeWinPct: number; awayWinPct: number; tiesPct: number;
+  confidence: number; confidenceLabel: string;
+  topScores: Array<{ home: number; away: number; pct: number }>;
+} {
+  let homeWins = 0, awayWins = 0, ties = 0;
+  const scoreMap = new Map<string, number>();
 
-  for (let i = 0; i < n; i++) {
-    const h = Math.max(0, Math.round(homeScore + gaussianRandom(0, 9.5)));
-    const a = Math.max(0, Math.round(awayScore + gaussianRandom(0, 9.5)));
-
-    if      (h > a) homeWins++;
-    else if (a > h) awayWins++;
-    else            ties++;
-
-    const key = `${h}-${a}`;
-    scoreCounts[key] = (scoreCounts[key] ?? 0) + 1;
+  for (let i = 0; i < iterations; i++) {
+    const gauss = () => {
+      const u = 1 - Math.random(), v = 1 - Math.random();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * 9.5;
+    };
+    const h = Math.max(0, Math.round(homeScore + gauss()));
+    const a = Math.max(0, Math.round(awayScore + gauss()));
+    if (h > a) homeWins++; else if (a > h) awayWins++; else ties++;
+    const k = `${h}-${a}`;
+    scoreMap.set(k, (scoreMap.get(k) ?? 0) + 1);
   }
 
-  const topScores = Object.entries(scoreCounts)
+  const hwp = Math.round((homeWins / iterations) * 1000) / 10;
+  const awp = Math.round((awayWins / iterations) * 1000) / 10;
+  const tp  = Math.round((ties     / iterations) * 1000) / 10;
+  const margin = Math.abs(hwp - awp);
+  const confidence = Math.min(99, Math.round(50 + margin * 0.9));
+  const confidenceLabel =
+      margin > 35 ? 'Very High' : margin > 20 ? 'High' : margin > 10 ? 'Medium' : 'Low';
+
+  const topScores = [...scoreMap.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([score, count]) => ({
-        score,
-        pct: ((count / n) * 100).toFixed(1),
-      }));
+      .map(([k, c]) => {
+        const [h, aw] = k.split('-').map(Number);
+        return { home: h, away: aw, pct: Math.round((c / iterations) * 1000) / 10 };
+      });
 
-  const homeWinPct = (homeWins / n) * 100;
-  const awayWinPct = (awayWins / n) * 100;
-  const raw        = Math.abs(homeWinPct - 50) / 50;
-  const confidence = Math.round(50 + raw * 45);
-
-  let confidenceLabel: string;
-  if      (confidence >= 85) confidenceLabel = '🔒 LOCK';
-  else if (confidence >= 70) confidenceLabel = '✅ HIGH CONFIDENCE';
-  else if (confidence >= 55) confidenceLabel = '📊 LEAN';
-  else                       confidenceLabel = '🎲 TOSS-UP';
-
-  return {
-    homeWinPct: Math.round(homeWinPct * 10) / 10,
-    awayWinPct: Math.round(awayWinPct * 10) / 10,
-    tiesPct:    Math.round((ties / n) * 1000) / 10,
-    topScores,
-    confidence,
-    confidenceLabel,
-  };
+  return { homeWinPct: hwp, awayWinPct: awp, tiesPct: tp, confidence, confidenceLabel, topScores };
 }
 
-// ─── Factor Breakdown ─────────────────────────────────────────────────────────
-
-export function computeBreakdown(f: GameFactors): FactorBreakdown[] {
-  const totalH2H = f.homeH2HWins + f.awayH2HWins;
-  const h2hValue = totalH2H > 0
-      ? ((f.homeH2HWins / totalH2H) - 0.5) * 4.5
-      : 0;
-
-  let weatherValue = 0;
-  if (f.stadiumType === 'outdoor') {
-    if (f.wind > 15) weatherValue -= (f.wind - 15) * 0.025;
-    weatherValue -= RAIN_PENALTY[f.precipitation] * 0.1;
-  }
-
+export function computeBreakdown(f: GameFactors): Array<{ label: string; homeEdge: number }> {
   return [
-    {
-      label: 'EPA Advantage',
-      value: (f.homeEPA - f.awayEPA) * 27,
-    },
-    {
-      label: 'Home Field',
-      value: f.stadiumType !== 'neutral' ? 2.5 : 0,
-    },
-    {
-      label: 'Defensive Edge',
-      value: (f.awayPressure - f.homePressure) * 0.15,
-    },
-    {
-      label: 'Red Zone Edge',
-      value: (f.homeRedZone - f.awayRedZone) * 0.2,
-    },
-    {
-      label: 'Injury Impact',
-      value: -(f.homeInjuryImpact - f.awayInjuryImpact),
-    },
-    {
-      label: 'Weather',
-      value: weatherValue,
-    },
-    {
-      label: 'Momentum',
-      value: (MOMENTUM_VALUES[f.homeMomentum] ?? 0) - (MOMENTUM_VALUES[f.awayMomentum] ?? 0),
-    },
-    {
-      label: 'H2H History',
-      value: h2hValue,
-    },
-    {
-      label: 'Pace Edge',
-      value: ((f.homePlays - f.awayPlays) / 66) * 3,
-    },
+    { label: 'EPA',         homeEdge: Math.round((f.homeEPA - f.awayEPA) * 27 * 10) / 10 },
+    { label: 'Red Zone',    homeEdge: Math.round(((f.homeRedZone - f.awayRedZone) * 0.25) * 10) / 10 },
+    { label: 'Pace',        homeEdge: Math.round(((f.homePlays - f.awayPlays) / 66 * 5) * 10) / 10 },
+    { label: 'Defense',     homeEdge: Math.round((f.awayPointsAllowed - f.homePointsAllowed) * 0.3 * 10) / 10 },
+    { label: 'Pressure',    homeEdge: Math.round((f.awayPressure - f.homePressure) * 0.15 * 10) / 10 },
+    { label: 'Home Field',  homeEdge: 2.5 },
+    { label: 'Injuries',    homeEdge: Math.round((f.awayInjuryImpact - f.homeInjuryImpact) * 10) / 10 },
+    { label: 'Momentum',    homeEdge: Math.round(((momentumMap[f.homeMomentum] ?? 0) - (momentumMap[f.awayMomentum] ?? 0)) * 10) / 10 },
+    { label: 'H2H History', homeEdge: Math.round(((f.homeH2HWins - f.awayH2HWins) / (f.homeH2HWins + f.awayH2HWins || 1)) * 10) / 10 },
   ];
 }
