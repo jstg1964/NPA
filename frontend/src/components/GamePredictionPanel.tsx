@@ -19,10 +19,10 @@ interface Game {
     indoor: boolean;
     gameTime: string;
     broadcast: string;
-    spread: string;
-    overUnder: number;
-    weatherTemp: number;
-    weatherDesc: string;
+    spread: string | null;
+    overUnder: number | null;
+    weatherTemp: number | null;
+    weatherDesc: string | null;
 }
 
 export interface Factors {
@@ -262,10 +262,10 @@ export default function GamePredictionPanel({ game, onPrediction }: Props) {
                     awayH2HWins:       stats.awayH2HWins,
                     homeInjury:        0,
                     awayInjury:        0,
-                    stadiumType:       game.indoor ? 'dome' : 'outdoor',
-                    temp:              game.weatherTemp > 0 ? game.weatherTemp : 65,
+                    stadiumType:       (game.indoor ? 'dome' : 'outdoor') as Stadium,
+                    temp:              game.weatherTemp ?? 65,
                     wind:              8,
-                    precipitation:     'none',
+                    precipitation:     'none' as Precip,
                 }));
             })
             .catch((err: Error) => {
@@ -323,11 +323,11 @@ export default function GamePredictionPanel({ game, onPrediction }: Props) {
                 <p className="text-yellow-500 text-xs text-center py-2">{statsError}</p>
             ) : (
                 <div className="flex flex-col">
-                    <StatRow label="EPA / Play"      homeVal={factors.homeEpa}           awayVal={factors.awayEpa} />
-                    <StatRow label="Red Zone %"      homeVal={factors.homeRedZone}       awayVal={factors.awayRedZone}       unit="%" />
-                    <StatRow label="Plays / Game"    homeVal={factors.homePlays}         awayVal={factors.awayPlays}         decimals={0} />
-                    <StatRow label="Pressure Rate"   homeVal={factors.homePressure}      awayVal={factors.awayPressure}      decimals={0} />
-                    <StatRow label="Pts Allowed"     homeVal={factors.homePointsAllowed} awayVal={factors.awayPointsAllowed} />
+                    <StatRow label="EPA / Play"    homeVal={factors.homeEpa}           awayVal={factors.awayEpa} />
+                    <StatRow label="Red Zone %"    homeVal={factors.homeRedZone}       awayVal={factors.awayRedZone}       unit="%" />
+                    <StatRow label="Plays / Game"  homeVal={factors.homePlays}         awayVal={factors.awayPlays}         decimals={0} />
+                    <StatRow label="Pressure Rate" homeVal={factors.homePressure}      awayVal={factors.awayPressure}      decimals={0} />
+                    <StatRow label="Pts Allowed"   homeVal={factors.homePointsAllowed} awayVal={factors.awayPointsAllowed} />
                 </div>
             )}
 
