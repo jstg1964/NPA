@@ -1,6 +1,5 @@
 import './index.css';
 import { useState } from 'react';
-import Sidebar from './layout/Sidebar';
 import Header from './layout/Header';
 import TeamSelector from './components/TeamSelector';
 import GamePredictionPanel from './components/GamePredictionPanel';
@@ -33,7 +32,7 @@ function buildBettingLines(p: any) {
         spreadDiff:     p.spreadDiff,
         totalDiff:      p.totalDiff,
         bookmaker:      p.bookmaker,
-        predictedScore: `${p.predictedScoreA} - ${p.predictedScoreB}`,
+        predictedScore: `${p.predictedScoreB} - ${p.predictedScoreA}`,
     };
 }
 
@@ -72,9 +71,11 @@ function PredictionModal({ prediction, game, onClose, onRefresh }: PredictionMod
                 {prediction.winner && (
                     <div className="mx-6 mt-4 py-3 rounded-xl bg-gradient-to-r from-green-800/60 to-blue-800/60 border border-green-700/40 text-center">
                         <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Predicted Winner</p>
-                        <p className="text-2xl font-bold text-white">{prediction.winner}</p>
+                        <p className="text-2xl font-bold text-white">
+                            {prediction.winner === 'home' ? game.teamB : game.teamA}
+                        </p>
                         <p className="text-sm text-gray-400 mt-1">
-                            {prediction.predictedScoreA} &ndash; {prediction.predictedScoreB}
+                            {game.teamB} {prediction.predictedScoreB} &ndash; {game.teamA} {prediction.predictedScoreA}
                         </p>
                     </div>
                 )}
@@ -114,7 +115,12 @@ export default function App() {
         setError(null);
         setPrediction(null);
         try {
-            const result = await generatePrediction(Number(selectedGame.id), factors);
+            const result = await generatePrediction(
+                Number(selectedGame.id),
+                factors,
+                selectedGame.teamB,  // home team
+                selectedGame.teamA,  // away team
+            );
             setPrediction(result);
         } catch (e: any) {
             setError(e?.message ?? 'Prediction failed. Please try again.');
@@ -124,11 +130,10 @@ export default function App() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-900 text-white dark:bg-black">
-            <Sidebar />
-            <div className="flex-1 flex flex-col">
-                <Header />
-                <div className="p-6 space-y-6 overflow-auto">
+        <div className="flex flex-col h-screen bg-gray-900 text-white dark:bg-black">
+            <Header />
+            <div className="flex-1 overflow-auto">
+                <div className="p-6 space-y-6">
 
                     <TeamSelector
                         selectedGame={selectedGame}
