@@ -1,16 +1,16 @@
-import { predictGame, runSimulation, computeBreakdown, GameFactors } from './scoringEngine';
+import { predictGame, runSimulation, GameFactors } from './scoringEngine';
 import { fetchNFLOdds, findOddsForGame } from './oddsService';
 
 export interface IncomingFactors {
-  homeEpa:           number;
+  homeEpa:           number;   // raw yardsPerPassAttempt from ESPN (~4–9)
   awayEpa:           number;
-  homeRedZone:       number;
+  homeRedZone:       number;   // 0–100
   awayRedZone:       number;
-  homePlays:         number;
+  homePlays:         number;   // plays per game 45–85
   awayPlays:         number;
-  homePressure:      number;
+  homePressure:      number;   // raw sacks from ESPN (~0–6)
   awayPressure:      number;
-  homePointsAllowed: number;
+  homePointsAllowed: number;   // points per game
   awayPointsAllowed: number;
   homeH2HWins:       number;
   awayH2HWins:       number;
@@ -20,22 +20,55 @@ export interface IncomingFactors {
   temp:              number;
   wind:              number;
   precipitation:     'none' | 'light' | 'heavy' | 'snow' | 'blizzard';
-  // Team names passed from the frontend for odds matching
   homeTeam?:         string;
   awayTeam?:         string;
 }
 
+// ─── Normalization helpers ────────────────────────────────────────────────────
+
+/**
+ * ESPN returns yardsPerPassAttempt (~4–9 range).
+ * scoringEngine expects EPA per play in the range -0.3 to 0.3.
+ * Normalize: league avg YPA is ~7.0, shift and scale to -0.3..0.3.
+ */
+function normalizeEPA(ypa: number): number {
+  const normalized = (ypa - 7.0) / 10;
+  return Math.max(-0.3, Math.min(0.3, normalized));
+}
+
+/**
+ * ESPN returns sacks (raw count ~0–6 per game).
+ * scoringEngine expects pressure rate in the range 15–45.
+ * Normalize: sacks * 6 + 15, clamped to 15–45.
+ */
+function normalizePressure(sacks: number): number {
+  return Math.max(15, Math.min(45, sacks * 6 + 15));
+}
+
+/**
+ * Derive a simple momentum string from H2H wins.
+ * Used to satisfy the scoringEngine momentum field requirement.
+ */
+function deriveMomentum(h2hWins: number): '3-0' | '2-1' | '1-2' | '0-3' {
+  if (h2hWins >= 3) return '3-0';
+  if (h2hWins === 2) return '2-1';
+  if (h2hWins === 1) return '1-2';
+  return '0-3';
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
 export async function generatePrediction(gameId: number, factors: IncomingFactors) {
-  // Map frontend factors to the scoring engine's GameFactors shape
+  // Map and normalize frontend factors to the scoring engine's expected ranges
   const gameFactors: GameFactors = {
-    homeEPA:           factors.homeEpa,
-    awayEPA:           factors.awayEpa,
+    homeEPA:           normalizeEPA(factors.homeEpa),
+    awayEPA:           normalizeEPA(factors.awayEpa),
     homeRedZone:       factors.homeRedZone,
     awayRedZone:       factors.awayRedZone,
     homePlays:         factors.homePlays,
     awayPlays:         factors.awayPlays,
-    homePressure:      factors.homePressure,
-    awayPressure:      factors.awayPressure,
+    homePressure:      normalizePressure(factors.homePressure),
+    awayPressure:      normalizePressure(factors.awayPressure),
     homePointsAllowed: factors.homePointsAllowed,
     awayPointsAllowed: factors.awayPointsAllowed,
     homeH2HWins:       factors.homeH2HWins,
@@ -46,21 +79,16 @@ export async function generatePrediction(gameId: number, factors: IncomingFactor
     temp:              factors.temp,
     wind:              factors.wind,
     precipitation:     factors.precipitation,
-    // Momentum not yet in the UI — default to neutral
-    homeMomentum:      '2-1',
-    awayMomentum:      '2-1',
-    // Divisional flag not yet in UI — default false
+    homeMomentum:      deriveMomentum(factors.homeH2HWins),
+    awayMomentum:      deriveMomentum(factors.awayH2HWins),
     isDivisional:      false,
   };
 
   // Run the scoring engine
   const { homeScore, awayScore } = predictGame(gameFactors);
 
-  // Monte-Carlo simulation for win percentages and confidence
+  // Monte-Carlo simulation for win % and confidence
   const sim = runSimulation(homeScore, awayScore);
-
-  // Factor breakdown for display
-  const breakdown = computeBreakdown(gameFactors);
 
   // Fetch live Vegas odds and match to this game
   const allOdds = await fetchNFLOdds().catch(() => []);
@@ -76,12 +104,8 @@ export async function generatePrediction(gameId: number, factors: IncomingFactor
     predictedScoreB:  Math.round(homeScore),
     winner:           homeScore >= awayScore ? 'home' : 'away',
     confidence:       sim.confidence,
-    confidenceLabel:  sim.confidenceLabel,
     homeWinPct:       sim.homeWinPct,
     awayWinPct:       sim.awayWinPct,
-    tiesPct:          sim.tiesPct,
-    topScores:        sim.topScores,
-    breakdown,
     modelSpread,
     modelOverUnder,
     vegasSpread:      odds?.spread        ?? null,
